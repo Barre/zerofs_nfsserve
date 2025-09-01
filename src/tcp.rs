@@ -109,55 +109,15 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcpListener<T> {
     /// Binds to a ipstr of the form [ip address]:port. For instance
     /// "127.0.0.1:12000". fs is an instance of an implementation
     /// of NFSFileSystem.
-    pub async fn bind(ipstr: &str, fs: T) -> io::Result<NFSTcpListener<T>> {
-        let (ip, port) = ipstr.split_once(':').ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::AddrNotAvailable,
-                "IP Address must be of form ip:port",
-            )
-        })?;
-        let port = port.parse::<u16>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::AddrNotAvailable,
-                "Port not in range 0..=65535",
-            )
-        })?;
-
+    pub async fn bind(socket: SocketAddr, fs: T) -> io::Result<NFSTcpListener<T>> {
         let arcfs: Arc<T> = Arc::new(fs);
 
-        if ip == "auto" {
-            let mut num_tries_left = 32;
-
-            for try_ip in 1u16.. {
-                let ip = generate_host_ip(try_ip);
-
-                let result = NFSTcpListener::bind_internal(&ip, port, arcfs.clone()).await;
-
-                match &result {
-                    Err(_) => {
-                        if num_tries_left == 0 {
-                            return result;
-                        } else {
-                            num_tries_left -= 1;
-                            continue;
-                        }
-                    }
-                    Ok(_) => {
-                        return result;
-                    }
-                }
-            }
-            unreachable!(); // Does not detect automatically that loop above never terminates.
-        } else {
-            // Otherwise, try this.
-            NFSTcpListener::bind_internal(ip, port, arcfs).await
-        }
+        NFSTcpListener::bind_internal(socket, arcfs).await
     }
 
-    async fn bind_internal(ip: &str, port: u16, arcfs: Arc<T>) -> io::Result<NFSTcpListener<T>> {
-        let ipstr = format!("{ip}:{port}");
-        let listener = TcpListener::bind(&ipstr).await?;
-        info!("Listening on {:?}", &ipstr);
+    async fn bind_internal(socket: SocketAddr, arcfs: Arc<T>) -> io::Result<NFSTcpListener<T>> {
+        let listener = TcpListener::bind(&socket).await?;
+        info!("Listening on {:?}", &socket);
 
         let port = match listener.local_addr().unwrap() {
             SocketAddr::V4(s) => s.port(),
