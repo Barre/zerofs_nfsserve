@@ -1,6 +1,6 @@
 [package]
 name = "zerofs_nfsserve"
-version = "0.14.0"
+version = "0.15.0"
 edition = "2021"
 authors = ["Yucheng Low <ylow@xethub.com>", "Pierre Barre <pierre@barre.sh>"]
 description = "A Rust NFS Server implementation"

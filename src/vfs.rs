@@ -2,8 +2,6 @@ use crate::nfs;
 use crate::nfs::*;
 use async_trait::async_trait;
 use std::cmp::Ordering;
-use std::sync::Once;
-use std::time::SystemTime;
 
 /// Authentication context passed to filesystem operations
 #[derive(Clone, Debug)]
@@ -71,20 +69,7 @@ impl ReadDirSimpleResult {
     }
 }
 
-static mut GENERATION_NUMBER: u64 = 0;
-static GENERATION_NUMBER_INIT: Once = Once::new();
-
-fn get_generation_number() -> u64 {
-    unsafe {
-        GENERATION_NUMBER_INIT.call_once(|| {
-            GENERATION_NUMBER = SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
-        });
-        GENERATION_NUMBER
-    }
-}
+static GENERATION_NUMBER: u64 = 0;
 
 /// What capabilities are supported
 pub enum VFSCapabilities {
@@ -369,7 +354,7 @@ pub trait NFSFileSystem: Sync {
 
     /// Converts the fileid to an opaque NFS file handle. Optional.
     fn id_to_fh(&self, id: fileid3) -> nfs_fh3 {
-        let gennum = get_generation_number();
+        let gennum = GENERATION_NUMBER;
         let mut ret: Vec<u8> = Vec::new();
         ret.extend_from_slice(&gennum.to_le_bytes());
         ret.extend_from_slice(&id.to_le_bytes());
@@ -382,8 +367,7 @@ pub trait NFSFileSystem: Sync {
         }
         let gen = u64::from_le_bytes(id.data[0..8].try_into().unwrap());
         let id = u64::from_le_bytes(id.data[8..16].try_into().unwrap());
-        let gennum = get_generation_number();
-        match gen.cmp(&gennum) {
+        match gen.cmp(&GENERATION_NUMBER) {
             Ordering::Less => Err(nfsstat3::NFS3ERR_STALE),
             Ordering::Greater => Err(nfsstat3::NFS3ERR_BADHANDLE),
             Ordering::Equal => Ok(id),
@@ -404,7 +388,6 @@ pub trait NFSFileSystem: Sync {
     }
 
     fn serverid(&self) -> cookieverf3 {
-        let gennum = get_generation_number();
-        gennum.to_le_bytes()
+        GENERATION_NUMBER.to_le_bytes()
     }
 }
