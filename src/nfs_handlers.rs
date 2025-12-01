@@ -929,12 +929,13 @@ pub async fn nfsproc3_readdirplus(
             dirversion.serialize(&mut counting_output)?;
             for entry in result.entries {
                 let obj_attr = entry.attr;
+                let display_fileid = obj_attr.fileid;
                 let handle = nfs::post_op_fh3::handle(context.vfs.id_to_fh(entry.fileid));
 
                 let entry = entryplus3 {
-                    fileid: entry.fileid,
+                    fileid: display_fileid,
                     name: entry.name,
-                    cookie: entry.fileid,
+                    cookie: entry.cookie,
                     name_attributes: nfs::post_op_attr::attributes(obj_attr),
                     name_handle: handle,
                 };
@@ -1066,7 +1067,7 @@ pub async fn nfsproc3_readdir(
                 let entry = entry3 {
                     fileid: entry.fileid,
                     name: entry.name,
-                    cookie: entry.fileid,
+                    cookie: entry.cookie,
                 };
                 // write the entry into a buffer first
                 let mut write_buf: Vec<u8> = Vec::new();

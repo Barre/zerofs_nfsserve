@@ -33,6 +33,7 @@ impl AuthContext {
 pub struct DirEntrySimple {
     pub fileid: fileid3,
     pub name: filename3,
+    pub cookie: cookie3,
 }
 #[derive(Default, Debug)]
 pub struct ReadDirSimpleResult {
@@ -45,6 +46,7 @@ pub struct DirEntry {
     pub fileid: fileid3,
     pub name: filename3,
     pub attr: fattr3,
+    pub cookie: cookie3,
 }
 #[derive(Default, Debug)]
 pub struct ReadDirResult {
@@ -60,6 +62,7 @@ impl ReadDirSimpleResult {
             .map(|e| DirEntrySimple {
                 fileid: e.fileid,
                 name: e.name.clone(),
+                cookie: e.cookie,
             })
             .collect();
         ReadDirSimpleResult {
