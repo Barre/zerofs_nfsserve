@@ -36,6 +36,7 @@ pub fn generate_host_ip(hostnum: u16) -> String {
 async fn process_socket(
     mut socket: tokio::net::TcpStream,
     context: RPCContext,
+    shutdown: CancellationToken,
 ) -> Result<(), anyhow::Error> {
     let (mut message_handler, mut socksend, mut msgrecvchan) = SocketMessageHandler::new(&context);
     let _ = socket.set_nodelay(true);
@@ -50,6 +51,10 @@ async fn process_socket(
     });
     loop {
         tokio::select! {
+            _ = shutdown.cancelled() => {
+                debug!("NFS client handler shutting down");
+                return Ok(());
+            }
             _ = socket.readable() => {
                 let mut buf = [0; 128000];
 
@@ -101,9 +106,6 @@ pub trait NFSTcp: Send + Sync {
     /// Sets a mount listener. A "true" signal will be sent on a mount
     /// and a "false" will be sent on an unmount
     fn set_mount_listener(&mut self, signal: mpsc::Sender<bool>);
-
-    /// Loops forever and never returns handling all incoming connections.
-    async fn handle_forever(&self) -> io::Result<()>;
 
     /// Handles incoming connections until shutdown is signaled.
     async fn handle_with_shutdown(&self, shutdown: CancellationToken) -> io::Result<()>;
@@ -173,27 +175,6 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
         self.mount_signal = Some(signal);
     }
 
-    /// Loops forever and never returns handling all incoming connections.
-    async fn handle_forever(&self) -> io::Result<()> {
-        loop {
-            let (socket, _) = self.listener.accept().await?;
-            let context = RPCContext {
-                local_port: self.port,
-                client_addr: socket.peer_addr().unwrap().to_string(),
-                auth: crate::rpc::auth_unix::default(),
-                vfs: self.arcfs.clone(),
-                mount_signal: self.mount_signal.clone(),
-                export_name: self.export_name.clone(),
-                transaction_tracker: self.transaction_tracker.clone(),
-            };
-            info!("Accepting connection from {}", context.client_addr);
-            debug!("Accepting socket {:?} {:?}", socket, context);
-            tokio::spawn(async move {
-                let _ = process_socket(socket, context).await;
-            });
-        }
-    }
-
     /// Handles incoming connections until shutdown is signaled.
     async fn handle_with_shutdown(&self, shutdown: CancellationToken) -> io::Result<()> {
         loop {
@@ -215,8 +196,9 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
                     };
                     info!("Accepting connection from {}", context.client_addr);
                     debug!("Accepting socket {:?} {:?}", socket, context);
+                    let client_shutdown = shutdown.child_token();
                     tokio::spawn(async move {
-                        let _ = process_socket(socket, context).await;
+                        let _ = process_socket(socket, context, client_shutdown).await;
                     });
                 }
             }
