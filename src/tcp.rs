@@ -199,7 +199,7 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
         loop {
             tokio::select! {
                 _ = shutdown.cancelled() => {
-                    info!("NFS TCP server shutting down");
+                    info!("NFS TCP server shutting down on {}", self.listener.local_addr().unwrap());
                     break;
                 }
                 result = self.listener.accept() => {
