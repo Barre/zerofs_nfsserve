@@ -11,6 +11,7 @@ use std::{io, net::IpAddr};
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 /// A NFS Tcp Connection Handler
@@ -103,6 +104,9 @@ pub trait NFSTcp: Send + Sync {
 
     /// Loops forever and never returns handling all incoming connections.
     async fn handle_forever(&self) -> io::Result<()>;
+
+    /// Handles incoming connections until shutdown is signaled.
+    async fn handle_with_shutdown(&self, shutdown: CancellationToken) -> io::Result<()>;
 }
 
 impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcpListener<T> {
@@ -188,5 +192,36 @@ impl<T: NFSFileSystem + Send + Sync + 'static> NFSTcp for NFSTcpListener<T> {
                 let _ = process_socket(socket, context).await;
             });
         }
+    }
+
+    /// Handles incoming connections until shutdown is signaled.
+    async fn handle_with_shutdown(&self, shutdown: CancellationToken) -> io::Result<()> {
+        loop {
+            tokio::select! {
+                _ = shutdown.cancelled() => {
+                    info!("NFS TCP server shutting down");
+                    break;
+                }
+                result = self.listener.accept() => {
+                    let (socket, _) = result?;
+                    let context = RPCContext {
+                        local_port: self.port,
+                        client_addr: socket.peer_addr().unwrap().to_string(),
+                        auth: crate::rpc::auth_unix::default(),
+                        vfs: self.arcfs.clone(),
+                        mount_signal: self.mount_signal.clone(),
+                        export_name: self.export_name.clone(),
+                        transaction_tracker: self.transaction_tracker.clone(),
+                    };
+                    info!("Accepting connection from {}", context.client_addr);
+                    debug!("Accepting socket {:?} {:?}", socket, context);
+                    tokio::spawn(async move {
+                        let _ = process_socket(socket, context).await;
+                    });
+                }
+            }
+        }
+
+        Ok(())
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "zerofs_nfsserve"
-version = "0.17.1"
+version = "0.18.0"
 edition = "2021"
 authors = ["Yucheng Low <ylow@xethub.com>", "Pierre Barre <pierre@barre.sh>"]
 description = "A Rust NFS Server implementation"
@@ -30,6 +30,7 @@ tokio = { version = "1", features = [
     "rt",
     "macros",
 ], default-features = false }
+tokio-util = "0.7"
 futures = "0.3.21"
 tracing = "0.1.31"
 tracing-attributes = "0.1"
